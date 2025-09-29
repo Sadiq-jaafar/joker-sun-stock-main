@@ -17,15 +17,15 @@ export function Dashboard({ currentUser }: DashboardProps) {
   return (
     <div className=" flex flex-col min-h-screen bg-gradient-subtle">
       {/* Hero Section */}
-      <div className="relative overflow-hidden bg-gradient-primary text-white">
+      <div className="relative  bg-yellow-500 overflow-hidden bg-gradient-primary text-white">
         <div className="absolute inset-0 bg-black/20"></div>
         <div className="relative container mx-auto px-6 py-24">
           <div className="max-w-3xl">
-            <Badge variant="secondary" className="mb-4 bg-white/10 text-white border-white/20">
+            <Badge variant="secondary" className="mb-4 bg-yellow-500 text-white border-white/20">
               Welcome back, {currentUser.name}!
             </Badge>
             <h1 className="text-5xl font-bold mb-6 leading-tight">
-              Joker Solar Solution
+              Jokahh Solar Solution JSS
               <span className="block text-3xl font-normal opacity-90 mt-2">
                 Electronics Store Management
               </span>

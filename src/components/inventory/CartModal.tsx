@@ -31,7 +31,7 @@ export function CartModal({
   const [customerName, setCustomerName] = useState("");
   const { toast } = useToast();
 
-  const total = cartItems.reduce((sum, cartItem) => sum + (cartItem.item.price * cartItem.quantity), 0);
+  const total = cartItems.reduce((sum, cartItem) => sum + (cartItem.selectedPrice * cartItem.quantity), 0);
 
   const handleCheckout = () => {
     if (!customerName.trim()) {
@@ -85,29 +85,47 @@ export function CartModal({
                       <Badge variant="secondary" className="mt-1">
                         {cartItem.item.category}
                       </Badge>
-                      <p className="font-semibold mt-2">${cartItem.item.price.toFixed(2)} each</p>
+                      <p className="font-semibold mt-2">${cartItem.selectedPrice.toFixed(2)} each</p>
                     </div>
 
                     <div className="flex items-center gap-2">
-                      <Button
-                        size="icon"
-                        variant="outline"
-                        onClick={() => onUpdateQuantity(cartItem.item.id, Math.max(1, cartItem.quantity - 1))}
-                      >
-                        <Minus className="h-4 w-4" />
-                      </Button>
-                      <span className="w-12 text-center font-medium">{cartItem.quantity}</span>
-                      <Button
-                        size="icon"
-                        variant="outline"
-                        onClick={() => onUpdateQuantity(cartItem.item.id, cartItem.quantity + 1)}
-                      >
-                        <Plus className="h-4 w-4" />
-                      </Button>
+                      {cartItem.item.measureType === 'length' ? (
+                        <Input
+                          type="number"
+                          step="0.01"
+                          min="0.01"
+                          value={cartItem.quantity}
+                          onChange={(e) => {
+                            const value = parseFloat(e.target.value);
+                            if (!isNaN(value) && value > 0) {
+                              onUpdateQuantity(cartItem.item.id, value);
+                            }
+                          }}
+                          className="w-24"
+                        />
+                      ) : (
+                        <>
+                          <Button
+                            size="icon"
+                            variant="outline"
+                            onClick={() => onUpdateQuantity(cartItem.item.id, Math.max(1, cartItem.quantity - 1))}
+                          >
+                            <Minus className="h-4 w-4" />
+                          </Button>
+                          <span className="w-12 text-center font-medium">{cartItem.quantity}</span>
+                          <Button
+                            size="icon"
+                            variant="outline"
+                            onClick={() => onUpdateQuantity(cartItem.item.id, cartItem.quantity + 1)}
+                          >
+                            <Plus className="h-4 w-4" />
+                          </Button>
+                        </>
+                      )}
                     </div>
 
                     <div className="text-right">
-                      <p className="font-semibold">${(cartItem.item.price * cartItem.quantity).toFixed(2)}</p>
+                      <p className="font-semibold">${(cartItem.selectedPrice * cartItem.quantity).toFixed(2)}</p>
                       <Button
                         size="sm"
                         variant="ghost"

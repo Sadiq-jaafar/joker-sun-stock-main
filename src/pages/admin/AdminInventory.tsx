@@ -24,13 +24,16 @@ export function AdminInventory() {
     category: "",
     brand: "",
     model: "",
-    price: "",
+    minPrice: "",
+    maxPrice: "",
     cost: "",
     quantity: "",
+    length: "",
+    measureType: "standard",
     description: ""
   });
 
-  const categories = ["Solar Panels", "Batteries", "Inverters", "Controllers", "Lighting"];
+  const categories = ["Solar Panels", "Solar Panel Belgium", "Electrical Items", "Wire", "Batteries", "Inverters", "Controllers", "Lighting", "Others"];
 
   const resetForm = () => {
     setNewItem({
@@ -38,15 +41,20 @@ export function AdminInventory() {
       category: "",
       brand: "",
       model: "",
-      price: "",
+      minPrice: "",
+      maxPrice: "",
       cost: "",
       quantity: "",
+      length: "",
+      measureType: "standard",
       description: ""
     });
   };
 
   const handleAddItem = () => {
-    if (!newItem.name || !newItem.category || !newItem.price || !newItem.quantity) {
+    if (!newItem.name || !newItem.category || !newItem.minPrice || !newItem.maxPrice || 
+        (newItem.measureType === 'standard' && !newItem.quantity) || 
+        (newItem.measureType === 'length' && !newItem.length)) {
       toast({
         title: "Error",
         description: "Please fill in all required fields.",
@@ -61,9 +69,12 @@ export function AdminInventory() {
       category: newItem.category,
       brand: newItem.brand,
       model: newItem.model,
-      price: parseFloat(newItem.price),
+      minPrice: parseFloat(newItem.minPrice),
+      maxPrice: parseFloat(newItem.maxPrice),
       cost: parseFloat(newItem.cost) || 0,
-      quantity: parseInt(newItem.quantity),
+      quantity: newItem.measureType === 'standard' ? parseInt(newItem.quantity) : 0,
+      length: newItem.measureType === 'length' ? parseFloat(newItem.length) : undefined,
+      measureType: newItem.measureType as 'standard' | 'length',
       description: newItem.description,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString()
@@ -86,7 +97,10 @@ export function AdminInventory() {
       category: item.category,
       brand: item.brand,
       model: item.model,
-      price: item.price.toString(),
+      minPrice: item.minPrice.toString(),
+      maxPrice: item.maxPrice.toString(),
+      measureType: item.measureType,
+      length: item.length?.toString() || '',
       cost: item.cost.toString(),
       quantity: item.quantity.toString(),
       description: item.description
@@ -102,13 +116,16 @@ export function AdminInventory() {
       category: newItem.category,
       brand: newItem.brand,
       model: newItem.model,
-      price: parseFloat(newItem.price),
+      minPrice: parseFloat(newItem.minPrice),
+      maxPrice: parseFloat(newItem.maxPrice),
       cost: parseFloat(newItem.cost) || 0,
-      quantity: parseInt(newItem.quantity),
+      quantity: newItem.measureType === 'standard' ? parseInt(newItem.quantity) : 0,
+      length: newItem.measureType === 'length' ? parseFloat(newItem.length) : undefined,
+      measureType: newItem.measureType as 'standard' | 'length',
       description: newItem.description,
       updatedAt: new Date().toISOString()
     };
-
+    
     setItems(items.map(item => item.id === editingItem.id ? updatedItem : item));
     setEditingItem(null);
     resetForm();
@@ -127,10 +144,16 @@ export function AdminInventory() {
     });
   };
 
-  const getStockStatus = (quantity: number) => {
-    if (quantity === 0) return { label: "Out of Stock", variant: "destructive" as const };
-    if (quantity < 10) return { label: "Low Stock", variant: "secondary" as const };
-    return { label: "In Stock", variant: "default" as const };
+  const getStockStatus = (quantity: number, item: InventoryItem) => {
+    if (item.measureType === 'length') {
+      if (!item.length || item.length === 0) return { label: "Out of Stock", variant: "destructive" as const };
+      if (item.length < 10) return { label: "Low Stock", variant: "secondary" as const };
+      return { label: "In Stock", variant: "default" as const };
+    } else {
+      if (quantity === 0) return { label: "Out of Stock", variant: "destructive" as const };
+      if (quantity < 10) return { label: "Low Stock", variant: "secondary" as const };
+      return { label: "In Stock", variant: "default" as const };
+    }
   };
 
   return (
@@ -197,12 +220,21 @@ export function AdminInventory() {
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="price">Price ($) *</Label>
+                <Label htmlFor="minPrice">Minimum Price ($) *</Label>
                 <Input
-                  id="price"
+                  id="minPrice"
                   type="number"
-                  value={newItem.price}
-                  onChange={(e) => setNewItem({ ...newItem, price: e.target.value })}
+                  value={newItem.minPrice}
+                  onChange={(e) => setNewItem({ ...newItem, minPrice: e.target.value })}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="maxPrice">Maximum Price ($) *</Label>
+                <Input
+                  id="maxPrice"
+                  type="number"
+                  value={newItem.maxPrice}
+                  onChange={(e) => setNewItem({ ...newItem, maxPrice: e.target.value })}
                 />
               </div>
               <div className="space-y-2">
@@ -215,13 +247,40 @@ export function AdminInventory() {
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="quantity">Quantity *</Label>
-                <Input
-                  id="quantity"
-                  type="number"
-                  value={newItem.quantity}
-                  onChange={(e) => setNewItem({ ...newItem, quantity: e.target.value })}
-                />
+                <Label htmlFor="measureType">Measure Type *</Label>
+                <Select value={newItem.measureType} onValueChange={(value) => setNewItem({ ...newItem, measureType: value })}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select measure type" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="standard">Standard</SelectItem>
+                    <SelectItem value="length">Length</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                {newItem.measureType === 'standard' ? (
+                  <>
+                    <Label htmlFor="quantity">Quantity *</Label>
+                    <Input
+                      id="quantity"
+                      type="number"
+                      value={newItem.quantity}
+                      onChange={(e) => setNewItem({ ...newItem, quantity: e.target.value })}
+                    />
+                  </>
+                ) : (
+                  <>
+                    <Label htmlFor="length">Length *</Label>
+                    <Input
+                      id="length"
+                      type="number"
+                      step="0.01"
+                      value={newItem.length}
+                      onChange={(e) => setNewItem({ ...newItem, length: e.target.value })}
+                    />
+                  </>
+                )}
               </div>
               <div className="space-y-2 col-span-2">
                 <Label htmlFor="description">Description</Label>
@@ -261,7 +320,7 @@ export function AdminInventory() {
         <Card>
           <CardContent className="p-4">
             <div className="text-2xl font-bold text-primary">
-              ${items.reduce((sum, item) => sum + (item.price * item.quantity), 0).toLocaleString()}
+              ${items.reduce((sum, item) => sum + (item.minPrice * (item.measureType === 'standard' ? item.quantity : (item.length || 0))), 0).toLocaleString()}
             </div>
             <p className="text-sm text-muted-foreground">Total Value</p>
           </CardContent>
@@ -298,7 +357,7 @@ export function AdminInventory() {
               </TableHeader>
               <TableBody>
                 {items.map((item) => {
-                  const status = getStockStatus(item.quantity);
+                  const status = getStockStatus(item.quantity, item);
                   return (
                     <TableRow key={item.id}>
                       <TableCell className="font-medium">{item.name}</TableCell>
@@ -306,8 +365,12 @@ export function AdminInventory() {
                       <TableCell>
                         {item.brand} {item.model && `- ${item.model}`}
                       </TableCell>
-                      <TableCell>${item.price.toFixed(2)}</TableCell>
-                      <TableCell>{item.quantity}</TableCell>
+                      <TableCell>${item.minPrice.toFixed(2)} - ${item.maxPrice.toFixed(2)}</TableCell>
+                      <TableCell>
+                        {item.measureType === 'standard' 
+                          ? item.quantity 
+                          : `${item.length?.toFixed(2)} meters`}
+                      </TableCell>
                       <TableCell>
                         <Badge variant={status.variant}>{status.label}</Badge>
                       </TableCell>
@@ -386,12 +449,21 @@ export function AdminInventory() {
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="edit-price">Price ($) *</Label>
+              <Label htmlFor="edit-minPrice">Minimum Price ($) *</Label>
               <Input
-                id="edit-price"
+                id="edit-minPrice"
                 type="number"
-                value={newItem.price}
-                onChange={(e) => setNewItem({ ...newItem, price: e.target.value })}
+                value={newItem.minPrice}
+                onChange={(e) => setNewItem({ ...newItem, minPrice: e.target.value })}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="edit-maxPrice">Maximum Price ($) *</Label>
+              <Input
+                id="edit-maxPrice"
+                type="number"
+                value={newItem.maxPrice}
+                onChange={(e) => setNewItem({ ...newItem, maxPrice: e.target.value })}
               />
             </div>
             <div className="space-y-2">
@@ -404,13 +476,40 @@ export function AdminInventory() {
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="edit-quantity">Quantity *</Label>
-              <Input
-                id="edit-quantity"
-                type="number"
-                value={newItem.quantity}
-                onChange={(e) => setNewItem({ ...newItem, quantity: e.target.value })}
-              />
+              <Label htmlFor="edit-measureType">Measure Type *</Label>
+              <Select value={newItem.measureType} onValueChange={(value) => setNewItem({ ...newItem, measureType: value })}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select measure type" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="standard">Standard</SelectItem>
+                  <SelectItem value="length">Length</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              {newItem.measureType === 'standard' ? (
+                <>
+                  <Label htmlFor="edit-quantity">Quantity *</Label>
+                  <Input
+                    id="edit-quantity"
+                    type="number"
+                    value={newItem.quantity}
+                    onChange={(e) => setNewItem({ ...newItem, quantity: e.target.value })}
+                  />
+                </>
+              ) : (
+                <>
+                  <Label htmlFor="edit-length">Length *</Label>
+                  <Input
+                    id="edit-length"
+                    type="number"
+                    step="0.01"
+                    value={newItem.length}
+                    onChange={(e) => setNewItem({ ...newItem, length: e.target.value })}
+                  />
+                </>
+              )}
             </div>
             <div className="space-y-2 col-span-2">
               <Label htmlFor="edit-description">Description</Label>

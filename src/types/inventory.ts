@@ -4,9 +4,12 @@ export interface InventoryItem {
   category: string;
   brand: string;
   model: string;
-  price: number;
+  minPrice: number;
+  maxPrice: number;
   cost: number;
   quantity: number;
+  length?: number;
+  measureType: 'standard' | 'length';
   description: string;
   image?: string;
   createdAt: string;
@@ -16,6 +19,7 @@ export interface InventoryItem {
 export interface CartItem {
   item: InventoryItem;
   quantity: number;
+  selectedPrice: number;
 }
 
 export interface Sale {
@@ -25,6 +29,7 @@ export interface Sale {
   soldBy: string;
   soldAt: string;
   receiptNumber: string;
+  customerName: string;
 }
 
 export interface User {

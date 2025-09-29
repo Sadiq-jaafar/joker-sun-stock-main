@@ -1,6 +1,13 @@
+import { useState } from "react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
+import { Input } from "@/components/ui/input";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { useToast } from "@/hooks/use-toast";
+import { useNavigate } from "react-router-dom";
 import { 
   Sidebar, 
   SidebarContent, 
@@ -24,12 +31,18 @@ import { NavLink, useLocation } from "react-router-dom";
 
 interface AppSidebarProps {
   currentUser: { name: string; role: UserRole };
-  cartItemCount: number;
-  onCartClick: () => void;
 }
 
-export function AppSidebar({ currentUser, cartItemCount, onCartClick }: AppSidebarProps) {
+export function AppSidebar({ currentUser }: AppSidebarProps) {
   const location = useLocation();
+  const navigate = useNavigate();
+  const { toast } = useToast();
+  const [isChangePasswordOpen, setIsChangePasswordOpen] = useState(false);
+  const [passwordData, setPasswordData] = useState({
+    currentPassword: "",
+    newPassword: "",
+    confirmPassword: ""
+  });
 
   const navigation = [
     { id: "dashboard", name: "Dashboard", icon: LayoutDashboard, href: "/" },
@@ -43,13 +56,13 @@ export function AppSidebar({ currentUser, cartItemCount, onCartClick }: AppSideb
 
   return (
     <Sidebar>
-      <SidebarHeader className="border-b border-sidebar-border p-4">
+      <SidebarHeader className="border-b bg-slate-500 border-sidebar-border p-4">
         <div className="flex items-center gap-2">
           <div className="flex h-8 w-8 items-center justify-center rounded bg-primary">
             <Zap className="h-4 w-4 text-primary-foreground" />
           </div>
           <div>
-            <h2 className="text-sm font-semibold text-sidebar-foreground">Joker Solar</h2>
+            <h2 className="text-sm font-semibold text-sidebar-foreground">Jokahh Solar</h2>
             <p className="text-xs text-sidebar-foreground/60">Electronics Store</p>
           </div>
         </div>
@@ -75,39 +88,124 @@ export function AppSidebar({ currentUser, cartItemCount, onCartClick }: AppSideb
           ))}
         </SidebarMenu>
 
-        <div className="mt-6">
-          <Button
-            onClick={onCartClick}
-            variant="outline"
-            className="w-full justify-start"
-          >
-            <ShoppingCart className="h-4 w-4" />
-            Cart
-            {cartItemCount > 0 && (
-              <Badge variant="secondary" className="ml-auto">
-                {cartItemCount}
-              </Badge>
-            )}
-          </Button>
-        </div>
+        {/* Cart button removed - now handled by individual pages */}
       </SidebarContent>
 
       <SidebarFooter className="border-t border-sidebar-border p-4">
-        <div className="flex items-center gap-2">
-          <div className="h-8 w-8 rounded-full bg-primary flex items-center justify-center">
-            <span className="text-sm font-medium text-primary-foreground">
-              {currentUser.name.charAt(0)}
-            </span>
-          </div>
-          <div className="flex-1 min-w-0">
-            <p className="text-sm font-medium text-sidebar-foreground truncate">
-              {currentUser.name}
-            </p>
-            <p className="text-xs text-sidebar-foreground/60 capitalize">
-              {currentUser.role}
-            </p>
-          </div>
-        </div>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <div className="flex items-center gap-2 cursor-pointer hover:bg-sidebar-accent rounded-lg p-2">
+              <div className="h-8 w-8 rounded-full bg-primary flex items-center justify-center">
+                <span className="text-sm font-medium text-primary-foreground">
+                  {currentUser.name.charAt(0)}
+                </span>
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium text-sidebar-foreground truncate">
+                  {currentUser.name}
+                </p>
+                <p className="text-xs text-sidebar-foreground/60 capitalize">
+                  {currentUser.role}
+                </p>
+              </div>
+            </div>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-56">
+            <DropdownMenuItem onClick={() => setIsChangePasswordOpen(true)}>
+              Change Password
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => {
+              // Clear any auth tokens/state
+              localStorage.removeItem("authToken");
+              // Redirect to login
+              navigate("/login");
+              toast({
+                title: "Logged out",
+                description: "You have been successfully logged out."
+              });
+            }}>
+              Logout
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+
+        {/* Change Password Dialog */}
+        <Dialog open={isChangePasswordOpen} onOpenChange={setIsChangePasswordOpen}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Change Password</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="currentPassword">Current Password</Label>
+                <Input
+                  id="currentPassword"
+                  type="password"
+                  value={passwordData.currentPassword}
+                  onChange={(e) => setPasswordData({ ...passwordData, currentPassword: e.target.value })}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="newPassword">New Password</Label>
+                <Input
+                  id="newPassword"
+                  type="password"
+                  value={passwordData.newPassword}
+                  onChange={(e) => setPasswordData({ ...passwordData, newPassword: e.target.value })}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="confirmPassword">Confirm New Password</Label>
+                <Input
+                  id="confirmPassword"
+                  type="password"
+                  value={passwordData.confirmPassword}
+                  onChange={(e) => setPasswordData({ ...passwordData, confirmPassword: e.target.value })}
+                />
+              </div>
+            </div>
+            <DialogFooter className="flex gap-2 justify-end">
+              <Button variant="outline" onClick={() => {
+                setIsChangePasswordOpen(false);
+                setPasswordData({ currentPassword: "", newPassword: "", confirmPassword: "" });
+              }}>
+                Cancel
+              </Button>
+              <Button onClick={() => {
+                // Validate passwords
+                if (!passwordData.currentPassword || !passwordData.newPassword || !passwordData.confirmPassword) {
+                  toast({
+                    title: "Error",
+                    description: "All fields are required.",
+                    variant: "destructive"
+                  });
+                  return;
+                }
+
+                if (passwordData.newPassword !== passwordData.confirmPassword) {
+                  toast({
+                    title: "Error",
+                    description: "New passwords don't match.",
+                    variant: "destructive"
+                  });
+                  return;
+                }
+
+                // Here you would typically make an API call to change the password
+                // For now, we'll just show a success message
+                toast({
+                  title: "Success",
+                  description: "Password has been changed successfully."
+                });
+
+                setIsChangePasswordOpen(false);
+                setPasswordData({ currentPassword: "", newPassword: "", confirmPassword: "" });
+              }}>
+                Change Password
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </SidebarFooter>
     </Sidebar>
   );

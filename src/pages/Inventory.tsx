@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { CartModal } from "@/components/inventory/CartModal";
 import { ReceiptModal } from "@/components/inventory/ReceiptModal";
+import { LengthInputDialog } from "@/components/inventory/LengthInputDialog";
 import { InventoryItem, CartItem, Sale } from "@/types/inventory";
 import { mockInventoryItems } from "@/data/mockData";
 import { Plus, Search, Package } from "lucide-react";
@@ -22,6 +23,8 @@ export function InventoryPage({ currentUser = { name: "Default User", role: "use
   const [isCartOpen, setIsCartOpen] = useState(false);
   const [isReceiptOpen, setIsReceiptOpen] = useState(false);
   const [currentSale, setCurrentSale] = useState<Sale | null>(null);
+  const [isLengthDialogOpen, setIsLengthDialogOpen] = useState(false);
+  const [selectedLengthItem, setSelectedLengthItem] = useState<{item: InventoryItem, selectedPrice: number} | null>(null);
   const { toast } = useToast();
 
   const categories = ["all", ...new Set(mockInventoryItems.map(item => item.category))];
@@ -34,9 +37,16 @@ export function InventoryPage({ currentUser = { name: "Default User", role: "use
     return matchesSearch && matchesCategory;
   });
 
-  const addToCart = (item: InventoryItem) => {
+  const addToCart = (item: InventoryItem, selectedPrice: number) => {
     const existingItem = cartItems.find(cartItem => cartItem.item.id === item.id);
     
+    if (item.measureType === 'length') {
+      setSelectedLengthItem({ item, selectedPrice });
+      setIsLengthDialogOpen(true);
+      return;
+    }
+    
+    // Standard items logic
     if (existingItem) {
       if (existingItem.quantity >= item.quantity) {
         toast({
@@ -48,7 +58,7 @@ export function InventoryPage({ currentUser = { name: "Default User", role: "use
       }
       updateCartQuantity(item.id, existingItem.quantity + 1);
     } else {
-      setCartItems([...cartItems, { item, quantity: 1 }]);
+      setCartItems([...cartItems, { item, quantity: 1, selectedPrice }]);
       toast({
         title: "Added to cart",
         description: `${item.name} added to cart`
@@ -58,7 +68,23 @@ export function InventoryPage({ currentUser = { name: "Default User", role: "use
 
   const updateCartQuantity = (itemId: string, quantity: number) => {
     const item = mockInventoryItems.find(i => i.id === itemId);
-    if (item && quantity > item.quantity) {
+    if (!item) return;
+
+    if (item.measureType === 'length') {
+      // Calculate total length used in cart for this item
+      const usedLength = cartItems
+        .filter(cartItem => cartItem.item.id === itemId && cartItem !== cartItems.find(ci => ci.item.id === itemId))
+        .reduce((sum, cartItem) => sum + cartItem.quantity, 0);
+
+      if (quantity + usedLength > (item.length || 0)) {
+        toast({
+          title: "Insufficient length",
+          description: `Only ${(item.length || 0) - usedLength} meters available`,
+          variant: "destructive"
+        });
+        return;
+      }
+    } else if (quantity > item.quantity) {
       toast({
         title: "Insufficient stock",
         description: `Only ${item.quantity} units available`,
@@ -83,13 +109,14 @@ export function InventoryPage({ currentUser = { name: "Default User", role: "use
   };
 
   const handleCheckout = (customerName: string) => {
-    const total = cartItems.reduce((sum, cartItem) => sum + (cartItem.item.price * cartItem.quantity), 0);
+    const total = cartItems.reduce((sum, cartItem) => sum + (cartItem.selectedPrice * cartItem.quantity), 0);
     const receiptNumber = `JSS-${Date.now().toString().slice(-6)}`;
     
     const sale: Sale = {
       id: Date.now().toString(),
       items: [...cartItems],
       total,
+      customerName,
       soldBy: currentUser.name,
       soldAt: new Date().toISOString(),
       receiptNumber
@@ -107,7 +134,8 @@ export function InventoryPage({ currentUser = { name: "Default User", role: "use
   };
 
   const getCartItemCount = () => {
-    return cartItems.reduce((count, cartItem) => count + cartItem.quantity, 0);
+    const count = cartItems.reduce((sum, cartItem) => sum + cartItem.quantity, 0);
+    return count % 1 === 0 ? count : count.toFixed(2);
   };
 
   return (
@@ -158,8 +186,20 @@ export function InventoryPage({ currentUser = { name: "Default User", role: "use
             <CardHeader>
               <div className="flex justify-between items-start">
                 <Badge variant="secondary">{item.category}</Badge>
-                <Badge variant={item.quantity > 10 ? "default" : item.quantity > 0 ? "secondary" : "destructive"}>
-                  {item.quantity} in stock
+                <Badge 
+                  variant={
+                    item.measureType === 'length' 
+                      ? (item.length && item.length > 0 ? "default" : "destructive")
+                      : (item.quantity > 10 ? "default" : item.quantity > 0 ? "secondary" : "destructive")
+                  }
+                >
+                  {item.measureType === 'length' 
+                    ? (item.length ? `${(item.length - cartItems
+                        .filter(cartItem => cartItem.item.id === item.id)
+                        .reduce((sum, cartItem) => sum + cartItem.quantity, 0)
+                      ).toFixed(2)}m in stock` : 'Out of stock')
+                    : `${item.quantity} in stock`
+                  }
                 </Badge>
               </div>
               <CardTitle className="text-lg">{item.name}</CardTitle>
@@ -170,16 +210,37 @@ export function InventoryPage({ currentUser = { name: "Default User", role: "use
             <CardContent className="flex-1 flex flex-col justify-between">
               <div>
                 <p className="text-sm text-muted-foreground mb-4">{item.description}</p>
-                <p className="text-2xl font-bold text-primary mb-4">${item.price.toFixed(2)}</p>
+                <div className="space-y-2 mb-4">
+                  <p className="text-lg font-semibold text-primary">Price Range:</p>
+                  <div className="flex gap-4">
+                    <Button 
+                      variant="outline" 
+                      className="flex-1"
+                      onClick={() => addToCart(item, item.minPrice)}
+                      disabled={item.measureType === 'length' ? !item.length || item.length === 0 : item.quantity === 0}
+                    >
+                      ${item.minPrice.toFixed(2)}
+                    </Button>
+                    <Button 
+                      variant="outline" 
+                      className="flex-1"
+                      onClick={() => addToCart(item, item.maxPrice)}
+                      disabled={item.measureType === 'length' ? !item.length || item.length === 0 : item.quantity === 0}
+                    >
+                      ${item.maxPrice.toFixed(2)}
+                    </Button>
+                  </div>
+                </div>
               </div>
-              <Button 
-                onClick={() => addToCart(item)}
-                disabled={item.quantity === 0}
-                className="w-full"
-              >
-                <Plus className="h-4 w-4 mr-2" />
-                {item.quantity === 0 ? "Out of Stock" : "Add to Cart"}
-              </Button>
+              {(item.measureType === 'length' ? !item.length || item.length === 0 : item.quantity === 0) && (
+                <Button 
+                  disabled
+                  className="w-full"
+                >
+                  <Plus className="h-4 w-4 mr-2" />
+                  Out of Stock
+                </Button>
+              )}
             </CardContent>
           </Card>
         ))}
@@ -208,6 +269,50 @@ export function InventoryPage({ currentUser = { name: "Default User", role: "use
         onClose={() => setIsReceiptOpen(false)}
         sale={currentSale}
       />
+
+      {selectedLengthItem && (
+        <LengthInputDialog
+          isOpen={isLengthDialogOpen}
+          onClose={() => {
+            setIsLengthDialogOpen(false);
+            setSelectedLengthItem(null);
+          }}
+          onConfirm={(requestedLength) => {
+            const item = selectedLengthItem.item;
+            const usedLength = cartItems
+              .filter(cartItem => cartItem.item.id === item.id)
+              .reduce((sum, cartItem) => sum + cartItem.quantity, 0);
+
+            if (requestedLength + usedLength > (item.length || 0)) {
+              toast({
+                title: "Insufficient length",
+                description: `Only ${(item.length || 0) - usedLength} meters available`,
+                variant: "destructive"
+              });
+              return;
+            }
+
+            setCartItems([...cartItems, { 
+              item, 
+              quantity: requestedLength, 
+              selectedPrice: selectedLengthItem.selectedPrice 
+            }]);
+            toast({
+              title: "Added to cart",
+              description: `${requestedLength} meters of ${item.name} added to cart`
+            });
+            setIsLengthDialogOpen(false);
+            setSelectedLengthItem(null);
+          }}
+          itemName={selectedLengthItem.item.name}
+          availableLength={
+            (selectedLengthItem.item.length || 0) -
+            cartItems
+              .filter(cartItem => cartItem.item.id === selectedLengthItem.item.id)
+              .reduce((sum, cartItem) => sum + cartItem.quantity, 0)
+          }
+        />
+      )}
     </div>
   );
 }

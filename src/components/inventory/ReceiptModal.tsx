@@ -55,6 +55,10 @@ export function ReceiptModal({ isOpen, onClose, sale }: ReceiptModalProps) {
               <span className="font-mono">{sale.receiptNumber}</span>
             </div>
             <div className="flex justify-between">
+              <span>Customer:</span>
+              <span>{sale.customerName}</span>
+            </div>
+            <div className="flex justify-between">
               <span>Date:</span>
               <span>{new Date(sale.soldAt).toLocaleString()}</span>
             </div>
@@ -72,11 +76,11 @@ export function ReceiptModal({ isOpen, onClose, sale }: ReceiptModalProps) {
               <div key={index} className="space-y-1">
                 <div className="flex justify-between">
                   <span className="text-sm font-medium">{cartItem.item.name}</span>
-                  <span className="text-sm">${(cartItem.item.price * cartItem.quantity).toFixed(2)}</span>
+                  <span className="text-sm">${(cartItem.selectedPrice * cartItem.quantity).toFixed(2)}</span>
                 </div>
                 <div className="flex justify-between text-xs text-muted-foreground">
                   <span>{cartItem.item.brand} {cartItem.item.model}</span>
-                  <span>{cartItem.quantity} × ${cartItem.item.price.toFixed(2)}</span>
+                  <span>{cartItem.quantity} × ${cartItem.selectedPrice.toFixed(2)}</span>
                 </div>
               </div>
             ))}
@@ -130,6 +134,7 @@ function generateReceiptText(sale: Sale): string {
     "",
     `Receipt #: ${sale.receiptNumber}`,
     `Date: ${new Date(sale.soldAt).toLocaleString()}`,
+    `Customer: ${sale.customerName}`,
     `Sold by: ${sale.soldBy}`,
     "",
     "-------------------------------------",
@@ -140,7 +145,7 @@ function generateReceiptText(sale: Sale): string {
   sale.items.forEach((cartItem) => {
     lines.push(`${cartItem.item.name}`);
     lines.push(`${cartItem.item.brand} ${cartItem.item.model}`);
-    lines.push(`${cartItem.quantity} × $${cartItem.item.price.toFixed(2)} = $${(cartItem.item.price * cartItem.quantity).toFixed(2)}`);
+    lines.push(`${cartItem.quantity} × $${cartItem.selectedPrice.toFixed(2)} = $${(cartItem.selectedPrice * cartItem.quantity).toFixed(2)}`);
     lines.push("");
   });
 

@@ -1,4 +1,6 @@
 import { useState } from "react";
+import jsPDF from "jspdf";
+import autoTable from 'jspdf-autotable';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
@@ -13,9 +15,10 @@ const mockSales: Sale[] = [
   {
     id: "1",
     items: [
-      { item: { id: "1", name: "Solar Panel 300W", category: "Solar Panels", brand: "SunPower", model: "SP-300M", price: 250.00, cost: 180.00, quantity: 50, description: "High-efficiency monocrystalline solar panel", createdAt: "2024-01-15T10:00:00Z", updatedAt: "2024-01-15T10:00:00Z" }, quantity: 2 }
+      { item: { id: "1", name: "Solar Panel 300W", category: "Solar Panels", brand: "SunPower", model: "SP-300M", minPrice: 250.00, maxPrice: 300.00, cost: 180.00, quantity: 50, measureType: "standard" as const, description: "High-efficiency monocrystalline solar panel", createdAt: "2024-01-15T10:00:00Z", updatedAt: "2024-01-15T10:00:00Z" }, quantity: 2, selectedPrice: 250.00 }
     ],
     total: 500.00,
+    customerName: "John Smith",
     soldBy: "Sarah Sales",
     soldAt: "2024-01-20T14:30:00Z",
     receiptNumber: "RCP-001"
@@ -23,10 +26,11 @@ const mockSales: Sale[] = [
   {
     id: "2",
     items: [
-      { item: { id: "2", name: "Battery Storage 100Ah", category: "Batteries", brand: "Tesla", model: "LFP-100", price: 800.00, cost: 600.00, quantity: 25, description: "Lithium iron phosphate battery for solar storage", createdAt: "2024-01-15T10:00:00Z", updatedAt: "2024-01-15T10:00:00Z" }, quantity: 1 },
-      { item: { id: "3", name: "Inverter 5kW", category: "Inverters", brand: "Fronius", model: "Primo-5K", price: 1200.00, cost: 900.00, quantity: 15, description: "String inverter for residential solar systems", createdAt: "2024-01-15T10:00:00Z", updatedAt: "2024-01-15T10:00:00Z" }, quantity: 1 }
+      { item: { id: "2", name: "Battery Storage 100Ah", category: "Batteries", brand: "Tesla", model: "LFP-100", minPrice: 800.00, maxPrice: 900.00, cost: 600.00, quantity: 25, measureType: "standard" as const, description: "Lithium iron phosphate battery for solar storage", createdAt: "2024-01-15T10:00:00Z", updatedAt: "2024-01-15T10:00:00Z" }, quantity: 1, selectedPrice: 800.00 },
+      { item: { id: "3", name: "Inverter 5kW", category: "Inverters", brand: "Fronius", model: "Primo-5K", minPrice: 1200.00, maxPrice: 1400.00, cost: 900.00, quantity: 15, measureType: "standard" as const, description: "String inverter for residential solar systems", createdAt: "2024-01-15T10:00:00Z", updatedAt: "2024-01-15T10:00:00Z" }, quantity: 1, selectedPrice: 1200.00 }
     ],
     total: 2000.00,
+    customerName: "Emma Davis",
     soldBy: "Mike Merchant",
     soldAt: "2024-01-19T11:15:00Z",
     receiptNumber: "RCP-002"
@@ -34,9 +38,10 @@ const mockSales: Sale[] = [
   {
     id: "3",
     items: [
-      { item: { id: "5", name: "LED Floodlight 50W", category: "Lighting", brand: "Philips", model: "LED-50W-Solar", price: 80.00, cost: 55.00, quantity: 100, description: "Solar-powered LED floodlight for outdoor use", createdAt: "2024-01-15T10:00:00Z", updatedAt: "2024-01-15T10:00:00Z" }, quantity: 5 }
+      { item: { id: "5", name: "LED Floodlight 50W", category: "Lighting", brand: "Philips", model: "LED-50W-Solar", minPrice: 80.00, maxPrice: 95.00, cost: 55.00, quantity: 100, measureType: "standard" as const, description: "Solar-powered LED floodlight for outdoor use", createdAt: "2024-01-15T10:00:00Z", updatedAt: "2024-01-15T10:00:00Z" }, quantity: 5, selectedPrice: 80.00 }
     ],
     total: 400.00,
+    customerName: "Carlos Rodriguez",
     soldBy: "Sarah Sales",
     soldAt: "2024-01-18T16:45:00Z",
     receiptNumber: "RCP-003"
@@ -52,6 +57,7 @@ export function AdminSales() {
   const filteredSales = sales.filter(sale => {
     const matchesSearch = sale.receiptNumber.toLowerCase().includes(searchTerm.toLowerCase()) ||
                          sale.soldBy.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                         sale.customerName.toLowerCase().includes(searchTerm.toLowerCase()) ||
                          sale.items.some(item => item.item.name.toLowerCase().includes(searchTerm.toLowerCase()));
     
     if (filterBy === "all") return matchesSearch;
@@ -68,6 +74,47 @@ export function AdminSales() {
   const totalSales = sales.length;
   const averageSale = totalSales > 0 ? totalRevenue / totalSales : 0;
   const uniqueSellers = [...new Set(sales.map(sale => sale.soldBy))];
+
+  const generatePDF = () => {
+    const doc = new jsPDF();
+    
+    // Add header
+    doc.setFontSize(20);
+    doc.text('Sales Report', 14, 20);
+    doc.setFontSize(12);
+    doc.text(`Generated on: ${new Date().toLocaleDateString()}`, 14, 30);
+
+    // Add summary statistics
+    doc.text('Summary', 14, 40);
+    doc.text(`Total Revenue: $${totalRevenue.toLocaleString()}`, 14, 50);
+    doc.text(`Total Sales: ${totalSales}`, 14, 60);
+    doc.text(`Average Sale: $${averageSale.toFixed(2)}`, 14, 70);
+
+    // Prepare table data
+    const tableData = filteredSales.map(sale => [
+      sale.receiptNumber,
+      sale.items.map(item => `${item.quantity}x ${item.item.name} ($${item.selectedPrice.toFixed(2)} each)`).join('\n'),
+      `$${sale.total.toFixed(2)}`,
+      sale.customerName,
+      sale.soldBy,
+      new Date(sale.soldAt).toLocaleDateString(),
+      'Completed'
+    ]);
+
+    // Add sales table
+    autoTable(doc, {
+      startY: 80,
+      head: [['Receipt #', 'Items', 'Total', 'Customer', 'Sold By', 'Date', 'Status']],
+      body: tableData,
+      theme: 'striped',
+      headStyles: { fillColor: [63, 63, 70] },
+      styles: { fontSize: 10 },
+      margin: { top: 80 }
+    });
+
+    // Save the PDF
+    doc.save('sales-report.pdf');
+  };
 
   const getTimeAgo = (dateString: string) => {
     const now = new Date();
@@ -91,7 +138,7 @@ export function AdminSales() {
           </h1>
           <p className="text-muted-foreground mt-1">Track sales performance and revenue</p>
         </div>
-        <Button className="gap-2">
+        <Button className="gap-2" onClick={generatePDF}>
           <Download className="h-4 w-4" />
           Export Report
         </Button>
@@ -191,6 +238,7 @@ export function AdminSales() {
                   <TableHead>Receipt #</TableHead>
                   <TableHead>Items</TableHead>
                   <TableHead>Total</TableHead>
+                  <TableHead>Customer</TableHead>
                   <TableHead>Sold By</TableHead>
                   <TableHead>Date</TableHead>
                   <TableHead className="text-right">Status</TableHead>
@@ -204,7 +252,7 @@ export function AdminSales() {
                       <div className="space-y-1">
                         {sale.items.map((item, index) => (
                           <div key={index} className="text-sm">
-                            {item.quantity}x {item.item.name}
+                            {item.quantity}x {item.item.name} (${item.selectedPrice.toFixed(2)} each)
                           </div>
                         ))}
                       </div>
@@ -212,6 +260,7 @@ export function AdminSales() {
                     <TableCell className="font-semibold text-primary">
                       ${sale.total.toFixed(2)}
                     </TableCell>
+                    <TableCell>{sale.customerName}</TableCell>
                     <TableCell>{sale.soldBy}</TableCell>
                     <TableCell>
                       <div className="flex flex-col">
