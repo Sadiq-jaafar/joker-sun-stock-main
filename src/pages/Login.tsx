@@ -31,33 +31,48 @@ export default function Login() {
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    // Query the users table
-    const { data, error } = await supabase
-      .from("users")
-      .select("*")
-      .eq("email", email)
-      .eq("password", password) // ⚠️ Not secure: plain password check
-      .single();
+    try {
+      // First, check if user exists in users table
+      const { data: userData, error: userError } = await supabase
+        .from('users')
+        .select('id, email, name, role, password') // Make sure these columns exist in your table
+        .eq('email', email)
+        .single();
+
+      if (userError || !userData) {
+        throw new Error('User not found');
+      }
+
+      // Simple password check (you should use proper password hashing in production)
+      if (userData.password !== password) {
+        throw new Error('Invalid password');
+      }
+
+      // Store user data in localStorage (excluding password)
+      const userForStorage = {
+        id: userData.id,
+        email: userData.email,
+        name: userData.name,
+        role: userData.role
+      };
+      
+      localStorage.setItem('user', JSON.stringify(userForStorage));
+
       toast({
-       
-       title: "Login successfull",
-       description: "Welcome",
-    });
+        title: 'Login successful',
+        description: `Welcome back, ${userData.name}!`,
+      });
 
-    if (error || !data) {
-     toast({
-       variant: "destructive",
-       title: "Login failed",
-       description: "Invalid username or password",
-    });
-      return;
+      // Redirect to dashboard
+      navigate('/dashboard');
+    } catch (error) {
+      console.error('Login error:', error);
+      toast({
+        variant: 'destructive',
+        title: 'Login failed',
+        description: error.message || 'Invalid email or password',
+      });
     }
-
-    // Save user session in localStorage
-    localStorage.setItem("user", JSON.stringify(data));
-
-    // Redirect to dashboard
-    navigate("/dashboard");
   };
 
 
@@ -74,11 +89,11 @@ export default function Login() {
         <CardContent>
           <form onSubmit={handleLogin} className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="username">Username</Label>
+              <Label htmlFor="email">Email</Label>
               <Input
                 id="email"
-                type="text"
-                placeholder="Enter your username"
+                type="email"
+                placeholder="Enter your email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 required
