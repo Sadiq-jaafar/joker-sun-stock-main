@@ -48,15 +48,16 @@ export default function Login() {
         throw new Error('Invalid password');
       }
 
-      // Store user data in localStorage (excluding password)
-      const userForStorage = {
+      // Create user object for context (excluding password)
+      const userForAuth = {
         id: userData.id,
         email: userData.email,
         name: userData.name,
         role: userData.role
       };
       
-      localStorage.setItem('user', JSON.stringify(userForStorage));
+      // Update auth context
+      login(userForAuth);
 
       toast({
         title: 'Login successful',

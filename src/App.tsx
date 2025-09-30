@@ -12,7 +12,7 @@ import { AdminInventory } from "./pages/admin/AdminInventory";
 import { AdminUsers } from "./pages/admin/AdminUsers";
 import { AdminSales } from "./pages/admin/AdminSales";
 import NotFound from "./pages/NotFound";
-import ProtectedRoute from "./contexts/ProtectedRoute";
+import { ProtectedRoute } from "@/components/auth/ProtectedRoute";
 
 const queryClient = new QueryClient();
 
@@ -26,13 +26,60 @@ const App = () => (
           <Routes>
           <Route path="/login" element={<Login />} />
           <Route path="/" element={<Navigate to="/dashboard" replace />} />
-          <Route path="/dashboard" element={<DashboardLayout><Index currentUser={{ name: "", role: "user" }} 
           
-          /></DashboardLayout>} />
-          <Route path="/inventory" element={<DashboardLayout><InventoryPage /></DashboardLayout>} />
-          <Route path="/admin/inventory" element={<DashboardLayout><AdminInventory /></DashboardLayout>} />
-          <Route path="/admin/users" element={<DashboardLayout><AdminUsers /></DashboardLayout>} />
-          <Route path="/admin/sales" element={<DashboardLayout><AdminSales /></DashboardLayout>} />
+          {/* Protected regular user routes */}
+          <Route
+            path="/dashboard"
+            element={
+              <ProtectedRoute>
+                <DashboardLayout>
+                  <Index currentUser={{ name: "", role: "user" }} />
+                </DashboardLayout>
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/inventory"
+            element={
+              <ProtectedRoute>
+                <DashboardLayout>
+                  <InventoryPage />
+                </DashboardLayout>
+              </ProtectedRoute>
+            }
+          />
+
+          {/* Protected admin routes */}
+          <Route
+            path="/admin/inventory"
+            element={
+              <ProtectedRoute requiredRole="admin">
+                <DashboardLayout>
+                  <AdminInventory />
+                </DashboardLayout>
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/admin/users"
+            element={
+              <ProtectedRoute requiredRole="admin">
+                <DashboardLayout>
+                  <AdminUsers />
+                </DashboardLayout>
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/admin/sales"
+            element={
+              <ProtectedRoute requiredRole="admin">
+                <DashboardLayout>
+                  <AdminSales />
+                </DashboardLayout>
+              </ProtectedRoute>
+            }
+          />
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
           <Route path="*" element={<NotFound />} />
         </Routes>

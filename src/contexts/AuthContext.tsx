@@ -1,36 +1,51 @@
-import { createContext, useContext, useState, ReactNode } from 'react';
+import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 
 type UserRole = 'admin' | 'user' | null;
 
-interface AuthContextType {
+interface User {
+  id: string;
+  email: string;
+  name: string;
   role: UserRole;
-  login: (username: string, password: string) => boolean;
+}
+
+interface AuthContextType {
+  user: User | null;
+  role: UserRole;
+  login: (user: User) => void;
   logout: () => void;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
+  const [user, setUser] = useState<User | null>(null);
   const [role, setRole] = useState<UserRole>(null);
 
-  const login = (username: string, password: string) => {
-    // This is a simple example - in a real app, you'd verify credentials with a backend
-    if (username === "admin" && password === "admin") {
-      setRole("admin");
-      return true;
-    } else if (username === "user" && password === "user") {
-      setRole("user");
-      return true;
+  // Load user from localStorage on mount
+  useEffect(() => {
+    const storedUser = localStorage.getItem('user');
+    if (storedUser) {
+      const userData = JSON.parse(storedUser);
+      setUser(userData);
+      setRole(userData.role);
     }
-    return false;
+  }, []);
+
+  const login = (userData: User) => {
+    setUser(userData);
+    setRole(userData.role);
+    localStorage.setItem('user', JSON.stringify(userData));
   };
 
   const logout = () => {
+    setUser(null);
     setRole(null);
+    localStorage.removeItem('user');
   };
 
   return (
-    <AuthContext.Provider value={{ role, login, logout }}>
+    <AuthContext.Provider value={{ user, role, login, logout }}>
       {children}
     </AuthContext.Provider>
   );
