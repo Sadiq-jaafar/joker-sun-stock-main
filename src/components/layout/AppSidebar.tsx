@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { cn } from "@/lib/utils";
+import { supabase } from "@/lib/supabase";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
@@ -17,20 +18,21 @@ import {
   SidebarMenuButton,
   SidebarFooter
 } from "@/components/ui/sidebar";
-import { 
-  LayoutDashboard, 
-  Package, 
-  Users, 
-  Settings,
-  ShoppingCart,
-  Zap,
-  TrendingUp
-} from "lucide-react";
+  import { 
+    LayoutDashboard, 
+    Package, 
+    Users, 
+    Settings,
+    ShoppingCart,
+    Zap,
+    TrendingUp,
+    CreditCard
+  } from "lucide-react";
 import { UserRole } from "@/types/inventory";
 import { NavLink, useLocation } from "react-router-dom";
 
 interface AppSidebarProps {
-  currentUser: { name: string; role: UserRole };
+  currentUser: { id: string; name: string; role: UserRole };
 }
 
 export function AppSidebar({ currentUser }: AppSidebarProps) {
@@ -50,7 +52,8 @@ export function AppSidebar({ currentUser }: AppSidebarProps) {
     ...(currentUser.role === 'admin' ? [
       { id: "admin-inventory", name: "Manage Inventory", icon: Settings, href: "/admin/inventory" },
       { id: "admin-users", name: "Manage Users", icon: Users, href: "/admin/users" },
-      { id: "admin-sales", name: "Sales Reports", icon: TrendingUp, href: "/admin/sales" }
+      { id: "admin-sales", name: "Sales Reports", icon: TrendingUp, href: "/admin/sales" },
+      { id: "admin-credit", name: "Credit Sales", icon: CreditCard, href: "/admin/credit" }
     ] : [])
   ];
 
@@ -171,7 +174,7 @@ export function AppSidebar({ currentUser }: AppSidebarProps) {
               }}>
                 Cancel
               </Button>
-              <Button onClick={() => {
+              <Button onClick={async () => {
                 // Validate passwords
                 if (!passwordData.currentPassword || !passwordData.newPassword || !passwordData.confirmPassword) {
                   toast({
@@ -191,15 +194,50 @@ export function AppSidebar({ currentUser }: AppSidebarProps) {
                   return;
                 }
 
-                // Here you would typically make an API call to change the password
-                // For now, we'll just show a success message
-                toast({
-                  title: "Success",
-                  description: "Password has been changed successfully."
-                });
+                try {
+                  // First verify current password
+                  const { data: userData, error: verifyError } = await supabase
+                    .from('users')
+                    .select('password')
+                    .eq('id', currentUser.id)
+                    .single();
 
-                setIsChangePasswordOpen(false);
-                setPasswordData({ currentPassword: "", newPassword: "", confirmPassword: "" });
+                  if (verifyError) throw verifyError;
+                  if (userData.password !== passwordData.currentPassword) {
+                    toast({
+                      title: "Error",
+                      description: "Current password is incorrect.",
+                      variant: "destructive"
+                    });
+                    return;
+                  }
+
+                  // Update password
+                  const { error: updateError } = await supabase
+                    .from('users')
+                    .update({ 
+                      password: passwordData.newPassword,
+                      updated_at: new Date().toISOString()
+                    })
+                    .eq('id', currentUser.id);
+
+                  if (updateError) throw updateError;
+
+                  toast({
+                    title: "Success",
+                    description: "Password has been changed successfully."
+                  });
+
+                  setIsChangePasswordOpen(false);
+                  setPasswordData({ currentPassword: "", newPassword: "", confirmPassword: "" });
+                } catch (error) {
+                  console.error('Error changing password:', error);
+                  toast({
+                    title: "Error",
+                    description: "Failed to change password. Please try again.",
+                    variant: "destructive"
+                  });
+                }
               }}>
                 Change Password
               </Button>

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -8,15 +8,43 @@ import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Plus, Pencil, Trash2, Users, Shield, User } from "lucide-react";
-import { mockUsers } from "@/data/mockData";
 import { User as UserType, UserRole } from "@/types/inventory";
 import { useToast } from "@/hooks/use-toast";
+import { supabase } from "@/lib/supabase";
 
 export function AdminUsers() {
-  const [users, setUsers] = useState<UserType[]>(mockUsers);
-  const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
-  const [editingUser, setEditingUser] = useState<UserType | null>(null);
   const { toast } = useToast();
+  const [users, setUsers] = useState<UserType[]>([]);
+  const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+  const [editingUser, setEditingUser] = useState<UserType | null>(null);
+
+  const fetchUsers = useCallback(async () => {
+    try {
+      setIsLoading(true);
+      const { data, error } = await supabase
+        .from('users')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+
+      setUsers(data || []);
+    } catch (error) {
+      console.error('Error fetching users:', error);
+      toast({
+        variant: 'destructive',
+        title: 'Error',
+        description: 'Failed to load users'
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  }, [toast]);
+
+  useEffect(() => {
+    fetchUsers();
+  }, [fetchUsers]);
 
   const [newUser, setNewUser] = useState({
     name: "",
@@ -32,7 +60,7 @@ export function AdminUsers() {
     });
   };
 
-  const handleAddUser = () => {
+  const handleAddUser = async () => {
     if (!newUser.name || !newUser.email) {
       toast({
         title: "Error",
@@ -42,32 +70,46 @@ export function AdminUsers() {
       return;
     }
 
-    // Check if email already exists
-    if (users.some(user => user.email === newUser.email)) {
+    try {
+      // Simply insert the new user into the users table
+      const { data: userData, error: userError } = await supabase
+        .from('users')
+        .insert({
+          id: crypto.randomUUID(), // Generate a random UUID for the user
+          email: newUser.email,
+          name: newUser.name,
+          password: 'password', // Set default password
+          role: newUser.role,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
+        })
+        .select()
+        .single();
+
+      if (userError) {
+        console.error('Error creating user:', userError);
+        throw userError;
+      }
+
+      // Close dialog and reset form
+      setIsAddDialogOpen(false);
+      resetForm();
+      
+      // Refresh users list
+      await fetchUsers();
+
       toast({
-        title: "Error",
-        description: "A user with this email already exists.",
-        variant: "destructive"
+        title: "Success",
+        description: `User created successfully! Default password: 'password'`
       });
-      return;
+    } catch (error) {
+      console.error('Error creating user:', error);
+      toast({
+        variant: 'destructive',
+        title: 'Error',
+        description: error instanceof Error ? error.message : 'Failed to create user'
+      });
     }
-
-    const user: UserType = {
-      id: (users.length + 1).toString(),
-      name: newUser.name,
-      email: newUser.email,
-      role: newUser.role,
-      createdAt: new Date().toISOString()
-    };
-
-    setUsers([...users, user]);
-    setIsAddDialogOpen(false);
-    resetForm();
-    
-    toast({
-      title: "Success",
-      description: "User added successfully!"
-    });
   };
 
   const handleEditUser = (user: UserType) => {
@@ -79,42 +121,66 @@ export function AdminUsers() {
     });
   };
 
-  const handleUpdateUser = () => {
+  const handleUpdateUser = async () => {
     if (!editingUser) return;
 
-    // Check if email already exists (excluding current user)
-    if (users.some(user => user.email === newUser.email && user.id !== editingUser.id)) {
+    try {
+      // Update user profile in the database
+      const { error } = await supabase
+        .from('users')
+        .update({
+          name: newUser.name,
+          role: newUser.role
+        })
+        .eq('id', editingUser.id);
+
+      if (error) throw error;
+
+      // Refresh users list
+      await fetchUsers();
+      
+      // Reset form and close dialog
+      setEditingUser(null);
+      resetForm();
+      
       toast({
-        title: "Error",
-        description: "A user with this email already exists.",
-        variant: "destructive"
+        title: "Success",
+        description: "User updated successfully!"
       });
-      return;
+    } catch (error) {
+      console.error('Error updating user:', error);
+      toast({
+        variant: 'destructive',
+        title: 'Error',
+        description: error instanceof Error ? error.message : 'Failed to update user'
+      });
     }
-
-    const updatedUser: UserType = {
-      ...editingUser,
-      name: newUser.name,
-      email: newUser.email,
-      role: newUser.role
-    };
-
-    setUsers(users.map(user => user.id === editingUser.id ? updatedUser : user));
-    setEditingUser(null);
-    resetForm();
-    
-    toast({
-      title: "Success",
-      description: "User updated successfully!"
-    });
   };
 
-  const handleDeleteUser = (id: string) => {
-    setUsers(users.filter(user => user.id !== id));
-    toast({
-      title: "Success",
-      description: "User deleted successfully!"
-    });
+  const handleDeleteUser = async (id: string) => {
+    try {
+      const { error } = await supabase
+        .from('users')
+        .delete()
+        .eq('id', id);
+
+      if (error) throw error;
+
+      // Refresh the users list
+      await fetchUsers();
+      
+      toast({
+        title: "Success",
+        description: "User deleted successfully!"
+      });
+    } catch (error) {
+      console.error('Error deleting user:', error);
+      toast({
+        variant: 'destructive',
+        title: 'Error',
+        description: error instanceof Error ? error.message : 'Failed to delete user'
+      });
+    }
   };
 
   const getRoleIcon = (role: UserRole) => {

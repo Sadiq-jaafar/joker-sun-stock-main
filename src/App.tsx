@@ -11,6 +11,7 @@ import { InventoryPage } from "./pages/Inventory";
 import { AdminInventory } from "./pages/admin/AdminInventory";
 import { AdminUsers } from "./pages/admin/AdminUsers";
 import { AdminSales } from "./pages/admin/AdminSales";
+import { AdminCredit } from "./pages/admin/AdminCredit";
 import NotFound from "./pages/NotFound";
 import { ProtectedRoute } from "@/components/auth/ProtectedRoute";
 
@@ -76,6 +77,16 @@ const App = () => (
               <ProtectedRoute requiredRole="admin">
                 <DashboardLayout>
                   <AdminSales />
+                </DashboardLayout>
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/admin/credit"
+            element={
+              <ProtectedRoute requiredRole="admin">
+                <DashboardLayout>
+                  <AdminCredit />
                 </DashboardLayout>
               </ProtectedRoute>
             }

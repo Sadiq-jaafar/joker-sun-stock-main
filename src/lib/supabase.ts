@@ -7,4 +7,14 @@ if (!supabaseUrl || !supabaseAnonKey) {
   throw new Error('Missing Supabase environment variables');
 }
 
+const supabaseServiceRoleKey = import.meta.env.VITE_SUPABASE_SERVICE_ROLE_KEY;
+
 export const supabase = createClient(supabaseUrl, supabaseAnonKey);
+
+// Create admin client with service role key for admin operations
+export const adminAuthClient = createClient(supabaseUrl, supabaseServiceRoleKey || supabaseAnonKey, {
+  auth: {
+    autoRefreshToken: false,
+    persistSession: false
+  }
+});

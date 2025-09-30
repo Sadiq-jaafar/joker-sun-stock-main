@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -9,6 +9,23 @@ import { CartModal } from "@/components/inventory/CartModal";
 import { ReceiptModal } from "@/components/inventory/ReceiptModal";
 import { LengthInputDialog } from "@/components/inventory/LengthInputDialog";
 import { InventoryItem, CartItem, Sale } from "@/types/inventory";
+
+interface DBSale {
+  id: string;
+  customer_name: string;
+  total: number;
+  receipt_number: string;
+  sold_by: string;
+  sold_at: string;
+}
+
+interface DBCreditSale extends DBSale {
+  customer_phone: string;
+  amount_paid: number;
+  remaining_amount: number;
+  due_date: string;
+  status: 'pending' | 'partially_paid' | 'paid';
+}
 import { Plus, Search, Package, Loader2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/lib/supabase";
@@ -30,65 +47,64 @@ export function InventoryPage({ currentUser = { name: "Default User", role: "use
   const [inventoryItems, setInventoryItems] = useState<InventoryItem[]>([]);
   const { toast } = useToast();
 
-  useEffect(() => {
-    const fetchInventory = async () => {
-      try {
-        console.log('Initializing inventory fetch...');
-        setIsLoading(true);
-        const { data, error } = await supabase
-          .from('inventory_items')
-          .select('*')
-          .order('created_at', { ascending: false });
+  // Function to fetch inventory data
+  const fetchInventory = useCallback(async () => {
+    try {
+      console.log('Initializing inventory fetch...');
+      setIsLoading(true);
+      
+      const { data, error } = await supabase
+        .from('inventory_items')
+        .select('*')
+        .order('created_at', { ascending: false });
 
-        if (error) {
-          console.error('Supabase error:', error);
-          console.error('Supabase client config:', {
-            url: Boolean(supabase.getUrl()),
-            hasAuth: Boolean(supabase.auth)
-          });
-          throw error;
-        }
-
-        if (!data) {
-          throw new Error('No data received from the server');
-        }
-
-        // Transform and validate the data
-        const transformedData: InventoryItem[] = data.map(item => ({
-          id: item.id,
-          name: item.name || '',
-          category: item.category || '',
-          brand: item.brand || '',
-          model: item.model || '',
-          minPrice: Number(item.min_price) || 0,
-          maxPrice: Number(item.max_price) || 0,
-          cost: Number(item.cost) || 0,
-          quantity: Number(item.quantity) || 0,
-          length: item.length ? Number(item.length) : undefined,
-          measureType: item.measure_type === 'length' ? 'length' : 'standard',
-          description: item.description || '',
-          image: item.image_url,
-          createdAt: item.created_at || new Date().toISOString(),
-          updatedAt: item.updated_at || new Date().toISOString()
-        }));
-
-        console.log('Transformed inventory items:', transformedData); // Debug log
-        setInventoryItems(transformedData);
-      } catch (error) {
-        console.error('Error fetching inventory:', error);
-        toast({
-          variant: 'destructive',
-          title: 'Error loading inventory',
-          description: error instanceof Error ? error.message : 'Failed to load inventory items'
-        });
-        setInventoryItems([]); // Set empty array on error
-      } finally {
-        setIsLoading(false);
+      if (error) {
+        console.error('Supabase error:', error);
+        throw error;
       }
-    };
 
-    fetchInventory();
+      if (!data) {
+        throw new Error('No data received from the server');
+      }
+
+      // Transform and validate the data
+      const transformedData: InventoryItem[] = data.map(item => ({
+        id: item.id,
+        name: item.name || '',
+        category: item.category || '',
+        brand: item.brand || '',
+        model: item.model || '',
+        minPrice: Number(item.min_price) || 0,
+        maxPrice: Number(item.max_price) || 0,
+        cost: Number(item.cost) || 0,
+        quantity: Number(item.quantity) || 0,
+        length: item.length ? Number(item.length) : undefined,
+        measureType: item.measure_type === 'length' ? 'length' : 'standard',
+        description: item.description || '',
+        image: item.image_url,
+        createdAt: item.created_at || new Date().toISOString(),
+        updatedAt: item.updated_at || new Date().toISOString()
+      }));
+
+      console.log('Transformed inventory items:', transformedData);
+      setInventoryItems(transformedData);
+    } catch (error) {
+      console.error('Error fetching inventory:', error);
+      toast({
+        variant: 'destructive',
+        title: 'Error loading inventory',
+        description: error instanceof Error ? error.message : 'Failed to load inventory items'
+      });
+      setInventoryItems([]); // Set empty array on error
+    } finally {
+      setIsLoading(false);
+    }
   }, [toast]);
+
+  // Fetch inventory data on component mount
+  useEffect(() => {
+    fetchInventory();
+  }, [fetchInventory]);
 
   const categories = ["all", ...new Set(inventoryItems.map(item => item.category))];
 
@@ -171,29 +187,198 @@ export function InventoryPage({ currentUser = { name: "Default User", role: "use
     });
   };
 
-  const handleCheckout = (customerName: string) => {
-    const total = cartItems.reduce((sum, cartItem) => sum + (cartItem.selectedPrice * cartItem.quantity), 0);
-    const receiptNumber = `JSS-${Date.now().toString().slice(-6)}`;
-    
-    const sale: Sale = {
-      id: Date.now().toString(),
-      items: [...cartItems],
-      total,
-      customerName,
-      soldBy: currentUser.name,
-      soldAt: new Date().toISOString(),
-      receiptNumber
-    };
+  const handleCheckout = async (saleData: { 
+    customerName: string;
+    isCredit: boolean;
+    paidAmount?: number;
+    customerPhone?: string;
+    dueDate?: string;
+  }) => {
+    try {
+      const total = cartItems.reduce((sum, cartItem) => sum + (cartItem.selectedPrice * cartItem.quantity), 0);
+      const now = new Date().toISOString();
+      let createdSale: DBSale | DBCreditSale | null = null;
+      const receiptNumber = `REC-${now.slice(0, 10).replace(/-/g, '')}-${Math.random().toString().slice(2, 6)}`;
 
-    setCurrentSale(sale);
-    setCartItems([]);
-    setIsCartOpen(false);
-    setIsReceiptOpen(true);
+      // 1. Create the sale record (either regular or credit)
+      if (saleData.isCredit) {
+        const { data: newCreditSale, error: creditSaleError } = await supabase
+          .from('credit_sales')
+          .insert({
+            customer_name: saleData.customerName,
+            customer_phone: saleData.customerPhone,
+            total,
+            amount_paid: saleData.paidAmount || 0,
+            remaining_amount: total - (saleData.paidAmount || 0),
+            due_date: saleData.dueDate,
+            receipt_number: receiptNumber,
+            sold_by: currentUser.name,
+            status: saleData.paidAmount && saleData.paidAmount > 0 ? 'partially_paid' : 'pending',
+            sold_at: now
+          })
+          .select()
+          .single();
 
-    toast({
-      title: "Sale completed!",
-      description: `Receipt #${receiptNumber} generated successfully`
-    });
+        if (creditSaleError) {
+          console.error('Credit sale creation error:', creditSaleError);
+          throw new Error('Failed to create credit sale: ' + creditSaleError.message);
+        }
+
+        if (!newCreditSale) {
+          throw new Error('No credit sale data returned after creation');
+        }
+
+        // If there's an initial payment, record it
+        if (saleData.paidAmount && saleData.paidAmount > 0) {
+          const { error: paymentError } = await supabase
+            .from('credit_payments')
+            .insert({
+              credit_sale_id: newCreditSale.id,
+              amount: saleData.paidAmount,
+              payment_method: 'cash',
+              recorded_by: currentUser.name,
+              notes: 'Initial payment'
+            });
+
+          if (paymentError) {
+            console.error('Payment recording error:', paymentError);
+            throw new Error('Failed to record initial payment: ' + paymentError.message);
+          }
+        }
+
+        // Save items to credit_sale_items
+        for (const item of cartItems) {
+          const { error: saleItemError } = await supabase
+            .from('credit_sale_items')
+            .insert({
+              credit_sale_id: newCreditSale.id,
+              item_id: item.item.id,
+              quantity: item.quantity,
+              unit_price: item.selectedPrice
+            });
+
+          if (saleItemError) {
+            console.error('Credit sale item creation error:', saleItemError);
+            throw new Error('Failed to create credit sale item: ' + saleItemError.message);
+          }
+        }
+
+        // Set newSale for receipt
+        createdSale = newCreditSale;
+      } else {
+        // Regular sale
+        const { data: regularSale, error: saleError } = await supabase
+          .from('sales')
+          .insert({
+            customer_name: saleData.customerName,
+            total,
+            receipt_number: receiptNumber,
+            sold_by: currentUser.name,
+            sold_at: now
+          })
+          .select()
+          .single();
+
+        if (saleError) {
+          console.error('Sale creation error:', saleError);
+          throw new Error('Failed to create sale: ' + saleError.message);
+        }
+
+        if (!regularSale) {
+          throw new Error('No sale data returned after creation');
+        }
+
+        createdSale = regularSale;
+      }
+
+
+
+      // 2. Insert sale items and update inventory
+      for (const item of cartItems) {
+        if (!saleData.isCredit) {
+          // Only insert into sale_items for regular sales
+          const { error: saleItemError } = await supabase
+            .from('sale_items')
+            .insert({
+              sale_id: createdSale.id,
+              item_id: item.item.id,
+              quantity: item.quantity,
+              unit_price: item.selectedPrice,
+              subtotal: item.quantity * item.selectedPrice
+            });
+
+          if (saleItemError) {
+            console.error('Sale item creation error:', saleItemError);
+            throw new Error('Failed to create sale item: ' + saleItemError.message);
+          }
+        }
+
+        // Update inventory quantity
+        const { error: updateError } = await supabase
+          .from('inventory_items')
+          .update({
+            [item.item.measureType === 'length' ? 'length' : 'quantity']: 
+              item.item.measureType === 'length' 
+                ? item.item.length! - item.quantity 
+                : item.item.quantity - item.quantity
+          })
+          .eq('id', item.item.id);
+
+        if (updateError) {
+          console.error('Inventory update error:', updateError);
+          throw new Error('Failed to update inventory: ' + updateError.message);
+        }
+      }
+
+      // Set current sale for receipt
+      const sale: Sale = {
+        id: createdSale.id,
+        items: [...cartItems], // Use cart items since they have the full item details
+        total,
+        customerName: saleData.customerName,
+        soldBy: currentUser.name,
+        soldAt: now,
+        receiptNumber
+      };
+
+      setCurrentSale(sale);
+      setCartItems([]);
+      setIsCartOpen(false);
+      setIsReceiptOpen(true);
+
+      // Refresh inventory data
+      await fetchInventory();
+
+      toast({
+        title: "Sale completed!",
+        description: `Receipt #${receiptNumber} generated successfully`
+      });
+    } catch (error) {
+      console.error('Error processing sale:', error);
+      
+      // Detailed error message based on the error type
+      let errorMessage = "Failed to process sale";
+      if (error instanceof Error) {
+        if (error.message.includes('insufficient stock')) {
+          errorMessage = "Sale failed: One or more items are out of stock";
+        } else if (error.message.includes('foreign key')) {
+          errorMessage = "Sale failed: Invalid item reference";
+        } else {
+          errorMessage = error.message;
+        }
+      }
+      
+      toast({
+        variant: 'destructive',
+        title: "Sale failed",
+        description: errorMessage
+      });
+      
+      // If there was an error, make sure we refresh inventory to get latest stock levels
+      fetchInventory().catch(err => {
+        console.error('Error refreshing inventory after failed sale:', err);
+      });
+    }
   };
 
   const getCartItemCount = () => {
