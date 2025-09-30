@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -9,15 +9,68 @@ import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Plus, Pencil, Trash2, Package } from "lucide-react";
-import { mockInventoryItems } from "@/data/mockData";
 import { InventoryItem } from "@/types/inventory";
+import { supabase } from "@/lib/supabase";
 import { useToast } from "@/hooks/use-toast";
 
 export function AdminInventory() {
-  const [items, setItems] = useState<InventoryItem[]>(mockInventoryItems);
+  const [items, setItems] = useState<InventoryItem[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<InventoryItem | null>(null);
   const { toast } = useToast();
+
+  useEffect(() => {
+    const fetchInventory = async () => {
+      try {
+        setIsLoading(true);
+        const { data, error } = await supabase
+          .from('inventory_items')
+          .select('*')
+          .order('created_at', { ascending: false });
+
+        if (error) {
+          console.error('Supabase error:', error);
+          throw error;
+        }
+
+        if (!data) {
+          throw new Error('No data received from the server');
+        }
+
+        const transformedData: InventoryItem[] = data.map(item => ({
+          id: item.id,
+          name: item.name || '',
+          category: item.category || '',
+          brand: item.brand || '',
+          model: item.model || '',
+          minPrice: Number(item.min_price) || 0,
+          maxPrice: Number(item.max_price) || 0,
+          cost: Number(item.cost) || 0,
+          quantity: Number(item.quantity) || 0,
+          length: item.length ? Number(item.length) : undefined,
+          measureType: item.measure_type === 'length' ? 'length' : 'standard',
+          description: item.description || '',
+          image: item.image_url,
+          createdAt: item.created_at || new Date().toISOString(),
+          updatedAt: item.updated_at || new Date().toISOString()
+        }));
+
+        setItems(transformedData);
+      } catch (error) {
+        console.error('Error fetching inventory:', error);
+        toast({
+          variant: 'destructive',
+          title: 'Error loading inventory',
+          description: error instanceof Error ? error.message : 'Failed to load inventory items'
+        });
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchInventory();
+  }, [toast]);
 
   const [newItem, setNewItem] = useState({
     name: "",
@@ -51,7 +104,7 @@ export function AdminInventory() {
     });
   };
 
-  const handleAddItem = () => {
+  const handleAddItem = async () => {
     if (!newItem.name || !newItem.category || !newItem.minPrice || !newItem.maxPrice || 
         (newItem.measureType === 'standard' && !newItem.quantity) || 
         (newItem.measureType === 'length' && !newItem.length)) {
@@ -63,26 +116,61 @@ export function AdminInventory() {
       return;
     }
 
-    const item: InventoryItem = {
-      id: (items.length + 1).toString(),
-      name: newItem.name,
-      category: newItem.category,
-      brand: newItem.brand,
-      model: newItem.model,
-      minPrice: parseFloat(newItem.minPrice),
-      maxPrice: parseFloat(newItem.maxPrice),
-      cost: parseFloat(newItem.cost) || 0,
-      quantity: newItem.measureType === 'standard' ? parseInt(newItem.quantity) : 0,
-      length: newItem.measureType === 'length' ? parseFloat(newItem.length) : undefined,
-      measureType: newItem.measureType as 'standard' | 'length',
-      description: newItem.description,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString()
-    };
+    try {
+      const { data, error } = await supabase
+        .from('inventory_items')
+        .insert([
+          {
+            name: newItem.name,
+            category: newItem.category,
+            brand: newItem.brand,
+            model: newItem.model,
+            min_price: parseFloat(newItem.minPrice),
+            max_price: parseFloat(newItem.maxPrice),
+            cost: parseFloat(newItem.cost) || 0,
+            quantity: newItem.measureType === 'standard' ? parseInt(newItem.quantity) : 0,
+            length: newItem.measureType === 'length' ? parseFloat(newItem.length) : null,
+            measure_type: newItem.measureType,
+            description: newItem.description
+          }
+        ])
+        .select();
 
-    setItems([...items, item]);
-    setIsAddDialogOpen(false);
-    resetForm();
+      if (error) throw error;
+
+      if (data && data[0]) {
+        const newItem = {
+          id: data[0].id,
+          name: data[0].name,
+          category: data[0].category,
+          brand: data[0].brand,
+          model: data[0].model,
+          minPrice: Number(data[0].min_price),
+          maxPrice: Number(data[0].max_price),
+          cost: Number(data[0].cost),
+          quantity: Number(data[0].quantity),
+          length: data[0].length ? Number(data[0].length) : undefined,
+          measureType: data[0].measure_type === 'length' ? 'length' : 'standard',
+          description: data[0].description,
+          createdAt: data[0].created_at,
+          updatedAt: data[0].updated_at
+        };
+        setItems([...items, newItem]);
+        setIsAddDialogOpen(false);
+        resetForm();
+        toast({
+          title: "Success",
+          description: "Item added successfully!"
+        });
+      }
+    } catch (error) {
+      console.error('Error adding item:', error);
+      toast({
+        variant: 'destructive',
+        title: 'Error adding item',
+        description: error instanceof Error ? error.message : 'Failed to add item'
+      });
+    }
     
     toast({
       title: "Success",
@@ -107,28 +195,63 @@ export function AdminInventory() {
     });
   };
 
-  const handleUpdateItem = () => {
+  const handleUpdateItem = async () => {
     if (!editingItem) return;
 
-    const updatedItem: InventoryItem = {
-      ...editingItem,
-      name: newItem.name,
-      category: newItem.category,
-      brand: newItem.brand,
-      model: newItem.model,
-      minPrice: parseFloat(newItem.minPrice),
-      maxPrice: parseFloat(newItem.maxPrice),
-      cost: parseFloat(newItem.cost) || 0,
-      quantity: newItem.measureType === 'standard' ? parseInt(newItem.quantity) : 0,
-      length: newItem.measureType === 'length' ? parseFloat(newItem.length) : undefined,
-      measureType: newItem.measureType as 'standard' | 'length',
-      description: newItem.description,
-      updatedAt: new Date().toISOString()
-    };
-    
-    setItems(items.map(item => item.id === editingItem.id ? updatedItem : item));
-    setEditingItem(null);
-    resetForm();
+    try {
+      const { data, error } = await supabase
+        .from('inventory_items')
+        .update({
+          name: newItem.name,
+          category: newItem.category,
+          brand: newItem.brand,
+          model: newItem.model,
+          min_price: parseFloat(newItem.minPrice),
+          max_price: parseFloat(newItem.maxPrice),
+          cost: parseFloat(newItem.cost) || 0,
+          quantity: newItem.measureType === 'standard' ? parseInt(newItem.quantity) : 0,
+          length: newItem.measureType === 'length' ? parseFloat(newItem.length) : null,
+          measure_type: newItem.measureType,
+          description: newItem.description
+        })
+        .eq('id', editingItem.id)
+        .select();
+
+      if (error) throw error;
+
+      if (data && data[0]) {
+        const updatedItem: InventoryItem = {
+          id: data[0].id,
+          name: data[0].name,
+          category: data[0].category,
+          brand: data[0].brand,
+          model: data[0].model,
+          minPrice: Number(data[0].min_price),
+          maxPrice: Number(data[0].max_price),
+          cost: Number(data[0].cost),
+          quantity: Number(data[0].quantity),
+          length: data[0].length ? Number(data[0].length) : undefined,
+          measureType: data[0].measure_type === 'length' ? 'length' : 'standard',
+          description: data[0].description,
+          createdAt: data[0].created_at,
+          updatedAt: data[0].updated_at
+        };
+        setItems(items.map(item => item.id === editingItem.id ? updatedItem : item));
+        setEditingItem(null);
+        resetForm();
+        toast({
+          title: "Success",
+          description: "Item updated successfully!"
+        });
+      }
+    } catch (error) {
+      console.error('Error updating item:', error);
+      toast({
+        variant: 'destructive',
+        title: 'Error updating item',
+        description: error instanceof Error ? error.message : 'Failed to update item'
+      });
+    }
     
     toast({
       title: "Success",
@@ -136,7 +259,28 @@ export function AdminInventory() {
     });
   };
 
-  const handleDeleteItem = (id: string) => {
+  const handleDeleteItem = async (id: string) => {
+    try {
+      const { error } = await supabase
+        .from('inventory_items')
+        .delete()
+        .eq('id', id);
+
+      if (error) throw error;
+
+      setItems(items.filter(item => item.id !== id));
+      toast({
+        title: "Success",
+        description: "Item deleted successfully!"
+      });
+    } catch (error) {
+      console.error('Error deleting item:', error);
+      toast({
+        variant: 'destructive',
+        title: 'Error deleting item',
+        description: error instanceof Error ? error.message : 'Failed to delete item'
+      });
+    }
     setItems(items.filter(item => item.id !== id));
     toast({
       title: "Success",

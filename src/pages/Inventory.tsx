@@ -1,16 +1,17 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { CartModal } from "@/components/inventory/CartModal";
 import { ReceiptModal } from "@/components/inventory/ReceiptModal";
 import { LengthInputDialog } from "@/components/inventory/LengthInputDialog";
 import { InventoryItem, CartItem, Sale } from "@/types/inventory";
-import { mockInventoryItems } from "@/data/mockData";
-import { Plus, Search, Package } from "lucide-react";
+import { Plus, Search, Package, Loader2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { supabase } from "@/lib/supabase";
 
 interface InventoryPageProps {
   currentUser?: { name: string; role: string };
@@ -25,11 +26,73 @@ export function InventoryPage({ currentUser = { name: "Default User", role: "use
   const [currentSale, setCurrentSale] = useState<Sale | null>(null);
   const [isLengthDialogOpen, setIsLengthDialogOpen] = useState(false);
   const [selectedLengthItem, setSelectedLengthItem] = useState<{item: InventoryItem, selectedPrice: number} | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [inventoryItems, setInventoryItems] = useState<InventoryItem[]>([]);
   const { toast } = useToast();
 
-  const categories = ["all", ...new Set(mockInventoryItems.map(item => item.category))];
+  useEffect(() => {
+    const fetchInventory = async () => {
+      try {
+        console.log('Initializing inventory fetch...');
+        setIsLoading(true);
+        const { data, error } = await supabase
+          .from('inventory_items')
+          .select('*')
+          .order('created_at', { ascending: false });
 
-  const filteredItems = mockInventoryItems.filter(item => {
+        if (error) {
+          console.error('Supabase error:', error);
+          console.error('Supabase client config:', {
+            url: Boolean(supabase.getUrl()),
+            hasAuth: Boolean(supabase.auth)
+          });
+          throw error;
+        }
+
+        if (!data) {
+          throw new Error('No data received from the server');
+        }
+
+        // Transform and validate the data
+        const transformedData: InventoryItem[] = data.map(item => ({
+          id: item.id,
+          name: item.name || '',
+          category: item.category || '',
+          brand: item.brand || '',
+          model: item.model || '',
+          minPrice: Number(item.min_price) || 0,
+          maxPrice: Number(item.max_price) || 0,
+          cost: Number(item.cost) || 0,
+          quantity: Number(item.quantity) || 0,
+          length: item.length ? Number(item.length) : undefined,
+          measureType: item.measure_type === 'length' ? 'length' : 'standard',
+          description: item.description || '',
+          image: item.image_url,
+          createdAt: item.created_at || new Date().toISOString(),
+          updatedAt: item.updated_at || new Date().toISOString()
+        }));
+
+        console.log('Transformed inventory items:', transformedData); // Debug log
+        setInventoryItems(transformedData);
+      } catch (error) {
+        console.error('Error fetching inventory:', error);
+        toast({
+          variant: 'destructive',
+          title: 'Error loading inventory',
+          description: error instanceof Error ? error.message : 'Failed to load inventory items'
+        });
+        setInventoryItems([]); // Set empty array on error
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchInventory();
+  }, [toast]);
+
+  const categories = ["all", ...new Set(inventoryItems.map(item => item.category))];
+
+  const filteredItems = inventoryItems.filter(item => {
     const matchesSearch = item.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
                          item.brand.toLowerCase().includes(searchTerm.toLowerCase()) ||
                          item.model.toLowerCase().includes(searchTerm.toLowerCase());
@@ -67,7 +130,7 @@ export function InventoryPage({ currentUser = { name: "Default User", role: "use
   };
 
   const updateCartQuantity = (itemId: string, quantity: number) => {
-    const item = mockInventoryItems.find(i => i.id === itemId);
+    const item = inventoryItems.find(i => i.id === itemId);
     if (!item) return;
 
     if (item.measureType === 'length') {
@@ -180,7 +243,38 @@ export function InventoryPage({ currentUser = { name: "Default User", role: "use
       </div>
 
       {/* Products Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+      {isLoading ? (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+          {Array.from({ length: 8 }).map((_, index) => (
+            <Card key={index} className="h-full flex flex-col">
+              <CardHeader>
+                <div className="flex justify-between items-start">
+                  <Skeleton className="h-5 w-20" />
+                  <Skeleton className="h-5 w-24" />
+                </div>
+                <div className="space-y-2">
+                  <Skeleton className="h-6 w-3/4" />
+                  <Skeleton className="h-4 w-1/2" />
+                </div>
+              </CardHeader>
+              <CardContent className="flex-1 flex flex-col justify-between">
+                <div>
+                  <Skeleton className="h-4 w-full mb-4" />
+                  <div className="space-y-2 mb-4">
+                    <Skeleton className="h-6 w-32" />
+                    <div className="flex gap-4">
+                      <Skeleton className="h-10 flex-1" />
+                      <Skeleton className="h-10 flex-1" />
+                    </div>
+                  </div>
+                </div>
+                <Skeleton className="h-10 w-full" />
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
         {filteredItems.map((item) => (
           <Card key={item.id} className="h-full flex flex-col">
             <CardHeader>
@@ -244,9 +338,10 @@ export function InventoryPage({ currentUser = { name: "Default User", role: "use
             </CardContent>
           </Card>
         ))}
-      </div>
+        </div>
+      )}
 
-      {filteredItems.length === 0 && (
+      {!isLoading && filteredItems.length === 0 && (
         <div className="text-center py-12">
           <Package className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
           <h3 className="text-lg font-medium mb-2">No products found</h3>
