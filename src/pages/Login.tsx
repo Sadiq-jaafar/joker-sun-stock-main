@@ -6,26 +6,60 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Label } from "@/components/ui/label";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/components/ui/use-toast";
+import { supabase } from "@/lib/supabase";
 
 export default function Login() {
-  const [username, setUsername] = useState("");
+  const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const navigate = useNavigate();
   const { login } = useAuth();
   const { toast } = useToast();
 
-  const handleSubmit = (e: React.FormEvent) => {
+  // const handleSubmit = (e: React.FormEvent) => {
+  //   e.preventDefault();
+  //   if (login(username, password)) {
+  //     navigate("/dashboard");
+  //   } else {
+  //     toast({
+  //       variant: "destructive",
+  //       title: "Login failed",
+  //       description: "Invalid username or password",
+  //     });
+  //   }
+  // };
+
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (login(username, password)) {
-      navigate("/dashboard");
-    } else {
+
+    // Query the users table
+    const { data, error } = await supabase
+      .from("users")
+      .select("*")
+      .eq("email", email)
+      .eq("password", password) // ⚠️ Not secure: plain password check
+      .single();
       toast({
-        variant: "destructive",
-        title: "Login failed",
-        description: "Invalid username or password",
-      });
+       
+       title: "Login successfull",
+       description: "Welcome",
+    });
+
+    if (error || !data) {
+     toast({
+       variant: "destructive",
+       title: "Login failed",
+       description: "Invalid username or password",
+    });
+      return;
     }
+
+    // Save user session in localStorage
+    localStorage.setItem("user", JSON.stringify(data));
+
+    // Redirect to dashboard
+    navigate("/dashboard");
   };
+
 
   return (
     <div className="min-h-screen flex flex-col items-center justify-center bg-gray-100">
@@ -38,15 +72,15 @@ export default function Login() {
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <form onSubmit={handleSubmit} className="space-y-4">
+          <form onSubmit={handleLogin} className="space-y-4">
             <div className="space-y-2">
               <Label htmlFor="username">Username</Label>
               <Input
-                id="username"
+                id="email"
                 type="text"
                 placeholder="Enter your username"
-                value={username}
-                onChange={(e) => setUsername(e.target.value)}
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
                 required
               />
             </div>

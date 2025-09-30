@@ -12,6 +12,7 @@ import { AdminInventory } from "./pages/admin/AdminInventory";
 import { AdminUsers } from "./pages/admin/AdminUsers";
 import { AdminSales } from "./pages/admin/AdminSales";
 import NotFound from "./pages/NotFound";
+import ProtectedRoute from "./contexts/ProtectedRoute";
 
 const queryClient = new QueryClient();
 
@@ -25,7 +26,9 @@ const App = () => (
           <Routes>
           <Route path="/login" element={<Login />} />
           <Route path="/" element={<Navigate to="/dashboard" replace />} />
-          <Route path="/dashboard" element={<DashboardLayout><Index currentUser={{ name: "", role: "user" }} /></DashboardLayout>} />
+          <Route path="/dashboard" element={<DashboardLayout><Index currentUser={{ name: "", role: "user" }} 
+          
+          /></DashboardLayout>} />
           <Route path="/inventory" element={<DashboardLayout><InventoryPage /></DashboardLayout>} />
           <Route path="/admin/inventory" element={<DashboardLayout><AdminInventory /></DashboardLayout>} />
           <Route path="/admin/users" element={<DashboardLayout><AdminUsers /></DashboardLayout>} />

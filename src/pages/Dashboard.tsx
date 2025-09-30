@@ -12,7 +12,7 @@ interface DashboardProps {
 export function Dashboard({ currentUser }: DashboardProps) {
   const totalItems = mockInventoryItems.reduce((sum, item) => sum + item.quantity, 0);
   const totalValue = mockInventoryItems.reduce((sum, item) => sum + (item.price * item.quantity), 0);
-  const lowStockItems = mockInventoryItems.filter(item => item.quantity < 10);
+  const lowStockItems = mockInventoryItems.filter(item => item.quantity < 3);
 
   return (
     <div className=" flex flex-col min-h-screen bg-gradient-subtle">
